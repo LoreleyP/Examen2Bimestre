@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -29,18 +30,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import androidx.core.database.getDoubleOrNull
 
 
-    class MovieDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
+class MovieDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
         override fun onCreate(db: SQLiteDatabase) {
             db.execSQL(
                 "CREATE TABLE $TABLE_MOVIES (" +
                         "$COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT," +
                         "$COLUMN_TITLE TEXT," +
-                        "$COLUMN_ACTORS TEXT)"
+                        "$COLUMN_ACTORS TEXT," +
+                        "$COLUMN_LATITUDE REAL," + // Tipo REAL para Double
+                        "$COLUMN_LONGITUDE REAL)"
             )
         }
 
@@ -54,6 +60,7 @@ import androidx.compose.ui.unit.dp
             val values = ContentValues().apply {
                 put(COLUMN_TITLE, movie.title)
                 put(COLUMN_ACTORS, movie.actors.joinToString(", "))
+                movie.latitude?.let { put(COLUMN_LATITUDE, it) }
             }
             db.insert(TABLE_MOVIES, null, values)
             db.close()
@@ -64,6 +71,8 @@ import androidx.compose.ui.unit.dp
             val values = ContentValues().apply {
                 put(COLUMN_TITLE, movie.title)
                 put(COLUMN_ACTORS, movie.actors.joinToString(", "))
+                movie.latitude?.let { put(COLUMN_LATITUDE, it) }
+                movie.longitude?.let { put(COLUMN_LONGITUDE, it) }
             }
             db.update(TABLE_MOVIES, values, "$COLUMN_ID = ?", arrayOf(movie.id.toString()))
             db.close()
@@ -85,7 +94,10 @@ import androidx.compose.ui.unit.dp
                     val id = getInt(getColumnIndexOrThrow(COLUMN_ID))
                     val title = getString(getColumnIndexOrThrow(COLUMN_TITLE))
                     val actors = getString(getColumnIndexOrThrow(COLUMN_ACTORS)).split(", ")
-                    movies.add(Movie(id, title, actors))
+                    val latitude = getDoubleOrNull(getColumnIndexOrThrow(COLUMN_LATITUDE)) // Usa función auxiliar
+                    val longitude = getDoubleOrNull(getColumnIndexOrThrow(COLUMN_LONGITUDE)) // Agregar esta línea
+
+                    movies.add(Movie(id, title, actors,latitude, longitude))
                 }
             }
             cursor.close()
@@ -100,6 +112,8 @@ import androidx.compose.ui.unit.dp
             const val COLUMN_ID = "id"
             const val COLUMN_TITLE = "title"
             const val COLUMN_ACTORS = "actors"
+            const val COLUMN_LATITUDE = "latitude"
+            const val COLUMN_LONGITUDE = "longitude"
         }
     }
 
@@ -283,6 +297,12 @@ import androidx.compose.ui.unit.dp
         onSave: (Movie) -> Unit
     ) {
         var title by remember { mutableStateOf(TextFieldValue(movie?.title ?: "")) }
+        var latitude by remember {
+            mutableStateOf(TextFieldValue(movie?.latitude?.toString() ?: ""))
+        }
+        var longitude by remember {
+            mutableStateOf(TextFieldValue(movie?.longitude?.toString() ?: ""))
+        }
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -297,14 +317,39 @@ import androidx.compose.ui.unit.dp
                             .fillMaxWidth()
                             .padding(vertical = 8.dp)
                     )
+
+                    Text("Latitud")
+                    BasicTextField(
+                        value = latitude,
+                        onValueChange = { latitude = it },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next), // Restringe a números
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
+
+                    Text("Longitud")
+                    BasicTextField(
+                        value = longitude,
+                        onValueChange = { longitude = it },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), // Restringe a números
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
                 }
             },
             confirmButton = {
                 Button(onClick = {
+                    val newLatitude = latitude.text.toDoubleOrNull() // Convierte a Double o null
+                    val newLongitude = longitude.text.toDoubleOrNull()
+
                     val newMovie = Movie(
                         id = movie?.id ?: 0,
                         title = title.text,
-                        actors = movie?.actors ?: emptyList()
+                        actors = movie?.actors ?: emptyList(),
+                        latitude = newLatitude,
+                        longitude = newLongitude
                     )
                     onSave(newMovie)
                 }) {
@@ -352,5 +397,5 @@ import androidx.compose.ui.unit.dp
     }
 
     // Data model
-    data class Movie(val id: Int, val title: String, val actors: List<String>)
+    data class Movie(val id: Int, val title: String, val actors: List<String>, val latitude: Double?, val longitude: Double? )
 
